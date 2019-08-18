@@ -1,6 +1,7 @@
 library(tidyverse)
 library(DataLoader)
 library(questionr)
+library(MASS)
 # Importation base
 # read_lines("base partie 1.xlsx", n_max=6)
 # OUILI_1 <- read_excel("BASE_NON_PFC.xlsx")
@@ -183,9 +184,98 @@ summary(JORDAN)
 # keep : NIVEAU DE GARANTIE, FRAIS REELS PAR ACTE (recoder en classe), QUANTITE(recoder en tenant compte de la PFC)
 # 
 
-write.csv2(OUILI, "OUILI2.csv")
+write.csv2(OUILI2, "OUILI.csv")
 
 # ANALYSE FACTORIELLE
-OUILI <- read_csv("OUILI")
+OUILI <- read_csv2("OUILI.csv")
+glimpse(OUILI)
+OUILI <- OUILI %>% dplyr:: select("MOIS_SOINS", "AGE2", "SEXE", "REGION", "COUVERTURE_INDIVIDUELLE", "NIVEAU_DE_GARANTIE", "PFC")
+library(FactoMineR)
+OUILI[c("MOIS_SOINS","SEXE","PFC","COUVERTURE_INDIVIDUELLE","NIVEAU_DE_GARANTIE","REGION", "AGE2")]<-lapply(OUILI[c("MOIS_SOINS","SEXE","PFC","COUVERTURE_INDIVIDUELLE","NIVEAU_DE_GARANTIE","REGION", "AGE2")], as.factor)
 
- 
+ACM_OUILI <- MCA(OUILI, ncp = 19, quali.sup = 7, graph=F)
+ACM_OUILI
+dim(ACM_OUILI$ind$contrib)
+OUILI_IND <- as.data.frame(ACM_OUILI$ind$contrib)
+glimpse(OUILI_IND)
+OUILI_PFC <- OUILI %>%dplyr::  select("PFC")
+glimpse(OUILI_PFC)
+OUILI_N <- cbind(OUILI_PFC, OUILI_IND)
+glimpse(OUILI_N)
+summary(OUILI_N)
+# Visualiser les valeurs propres
+val_propre <- ACM_OUILI$eig
+barplot(val_propre[, 2], 
+        names.arg = 1:nrow(val_propre), 
+        main = "Variances Explained by Dimensions (%)",
+        xlab = "Principal Dimensions",
+        ylab = "Percentage of variances",
+        col ="steelblue")
+# Add connected line segments to the plot
+lines(x = 1:nrow(val_propre), val_propre[, 2], 
+      type = "b", pch = 19, col = "red")
+
+# Nuage des Variables
+plot(ACM_OUILI,
+     invisible = c("ind", "quali.sup"),
+     cex = 0.8,                                    
+     autoLab = "yes")
+
+# Nuage des Variables
+plot(ACM_OUILI,
+     invisible = c("var", "quali.sup"),
+     cex = 0.8,                                    
+     autoLab = "yes")
+glimpse(OUILI_N)
+
+p <- round(16393*0.7)
+
+echa <- sample(1:16393,p)
+base_train <- OUILI_N[echa,] # selection de p OUILI_N
+base_test <- OUILI_N[-echa,] # tableau des 100 autres 
+espsup <- iris[-echa,5] # nom de l'esp`ece des 100 autres 
+lda2 <- lda(as.matrix(base_train[,2:20]),base_train$PFC)
+lda2
+summary(lda2)
+lda2$scaling
+# Calcul de projeté des individus sur D1
+xy2 <- as.vector(as.matrix(base_train[,2:20])%*%lda2$scaling[,1]) 
+xy2
+
+pred_lda2 <- predict(lda2,base_train[,2:20]) # fonction ge ́ne ́rique utilise predict.lda table(espestim,espsup)
+class(pred_lda2$posterior)
+pred1_lda2 <- pred_lda2$posterior[,2]
+PFC_lda2 <- if_else(base_train$PFC=="Non",0,1)
+pred2_lda2 <- as.data.frame(cbind(pred1_lda2, PFC_lda2))
+#table(OUILI$PFC,pred)
+library(ROCR)
+pred3_lda2 <- prediction(pred2_lda2$pred1,pred2_lda2$PFC) 
+perf_lda2 <- performance(pred3_lda2, "auc")m
+perf_lda2@y.values[[1]]
+perf_ROC_lda2 <- performance(pred3_lda2, "tpr", "fpr")
+plot(perf_ROC_lda2)
+
+
+
+
+
+# OUILI_lda <- lda(as.matrix(OUILI_N[,2:20]),OUILI_N$PFC)
+# OUILI_lda
+# summary(OUILI_lda)
+# OUILI_lda$scaling
+# # Calcul de projeté des individus sur D1
+# xy <- as.vector(as.matrix(OUILI_N[,2:20])%*%OUILI_lda$scaling[,1]) 
+# xy
+# 
+# pred <- predict(OUILI_lda,OUILI_N[,2:20]) # fonction ge ́ne ́rique utilise predict.lda table(espestim,espsup)
+# class(pred$posterior)
+# pred1 <- pred$posterior[,2]
+# PFC <- if_else(OUILI_N$PFC=="Non",0,1)
+# pred2 <- as.data.frame(cbind(pred1, PFC))
+# #table(OUILI$PFC,pred)
+# library(ROCR)
+# pred3 <- prediction(pred2$pred1,pred2$PFC) 
+# perf <- performance(pred3, "auc")
+# perf@y.values[[1]]
+# perf_ROC <- performance(pred3, "tpr", "fpr")
+# plot(perf_ROC)
